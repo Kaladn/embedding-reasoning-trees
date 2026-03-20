@@ -84,48 +84,83 @@ class NeighborEntry:
 
 # ── Binary Cell (one per anchor) ──────────────────────────────
 
-@dataclass
 class BinaryCellV2:
-    """Raw evidence cell for one anchor in the 6-1-6 structure."""
-    symbol_hex: str
-    display_text: str
-    status: str = "ASSIGNED"
-    category: str = "content"
-    source_pool: str = "canonical"
-    tone_signature: int = 0
-    total_count: int = 0           # times seen as anchor (NOT co-occurrence weight)
+    """Raw evidence cell for one anchor in the 6-1-6 structure.
 
-    buckets: Dict[str, List[NeighborEntry]] = field(default_factory=lambda: {
-        b: [] for b in BUCKET_ORDER
-    })
+    Accumulation uses dict-per-bucket (O(1) neighbor lookup).
+    Serialization freezes dicts into sorted lists.
+    """
+
+    __slots__ = (
+        "symbol_hex", "display_text", "status", "category",
+        "source_pool", "tone_signature", "total_count", "_bucket_maps",
+    )
+
+    def __init__(
+        self,
+        symbol_hex: str,
+        display_text: str,
+        status: str = "ASSIGNED",
+        category: str = "content",
+        source_pool: str = "canonical",
+        tone_signature: int = 0,
+        total_count: int = 0,
+    ):
+        self.symbol_hex = symbol_hex
+        self.display_text = display_text
+        self.status = status
+        self.category = category
+        self.source_pool = source_pool
+        self.tone_signature = tone_signature
+        self.total_count = total_count
+        # Dict keyed by neighbor_symbol → NeighborEntry (O(1) accumulation)
+        self._bucket_maps: Dict[str, Dict[str, NeighborEntry]] = {
+            b: {} for b in BUCKET_ORDER
+        }
 
     def add_neighbor(self, position: int, neighbor_symbol: str,
                      neighbor_word: str = "", count: int = 1, tone_sig: int = 0):
-        """Add/accumulate a neighbor at signed position (-6..-1, +1..+6)."""
+        """Add/accumulate a neighbor. O(1) per call."""
         if position == 0 or abs(position) > 6:
             return
         bucket_name = f"{'before' if position < 0 else 'after'}_{abs(position)}"
-        bucket = self.buckets[bucket_name]
-        for entry in bucket:
-            if entry.neighbor_symbol == neighbor_symbol:
-                entry.count += count
-                return
-        bucket.append(NeighborEntry(
-            neighbor_symbol=neighbor_symbol, neighbor_word=neighbor_word,
-            count=count, tone_sig=tone_sig,
-        ))
+        bmap = self._bucket_maps[bucket_name]
+        existing = bmap.get(neighbor_symbol)
+        if existing is not None:
+            existing.count += count
+        else:
+            bmap[neighbor_symbol] = NeighborEntry(
+                neighbor_symbol=neighbor_symbol,
+                neighbor_word=neighbor_word,
+                count=count,
+                tone_sig=tone_sig,
+            )
 
     def get_bucket(self, position: int) -> List[NeighborEntry]:
         """Get neighbors at signed position, sorted by count desc."""
         bucket_name = f"{'before' if position < 0 else 'after'}_{abs(position)}"
-        return sorted(self.buckets.get(bucket_name, []), key=lambda e: e.count, reverse=True)
+        entries = list(self._bucket_maps.get(bucket_name, {}).values())
+        entries.sort(key=lambda e: e.count, reverse=True)
+        return entries
+
+    @property
+    def buckets(self) -> Dict[str, List[NeighborEntry]]:
+        """Frozen view: dict values as sorted lists. For serialization/iteration."""
+        return {
+            name: sorted(bmap.values(), key=lambda e: e.count, reverse=True)
+            for name, bmap in self._bucket_maps.items()
+        }
 
     def total_co_occurrence_weight(self) -> int:
         """Sum of all neighbor counts. This is NOT total_count."""
-        return sum(e.count for b in self.buckets.values() for e in b)
+        return sum(
+            e.count
+            for bmap in self._bucket_maps.values()
+            for e in bmap.values()
+        )
 
     def to_bytes(self) -> bytes:
-        """Serialize. CRC32 appended."""
+        """Serialize. Freezes dicts into sorted lists. CRC32 appended."""
         sym_bytes = self.symbol_hex.encode("utf-8")
         disp_bytes = self.display_text.encode("utf-8")[:128]
 
@@ -142,8 +177,10 @@ class BinaryCellV2:
         buf += struct.pack(">I", self.total_count)
 
         for bucket_name in BUCKET_ORDER:
-            entries = self.buckets.get(bucket_name, [])
-            entries.sort(key=lambda e: e.count, reverse=True)
+            entries = sorted(
+                self._bucket_maps.get(bucket_name, {}).values(),
+                key=lambda e: e.count, reverse=True,
+            )
             n = min(len(entries), MAX_BUCKET_ENTRIES)
             buf += struct.pack(">H", n)
             for entry in entries[:n]:
@@ -191,11 +228,11 @@ class BinaryCellV2:
 
         for bucket_name in BUCKET_ORDER:
             entry_count = struct.unpack(">H", data[pos:pos + 2])[0]; pos += 2
-            entries = []
+            bmap = {}
             for _ in range(entry_count):
                 entry, pos = NeighborEntry.from_bytes(data, pos)
-                entries.append(entry)
-            cell.buckets[bucket_name] = entries
+                bmap[entry.neighbor_symbol] = entry
+            cell._bucket_maps[bucket_name] = bmap
 
         return cell
 
@@ -281,8 +318,8 @@ class CorpusStats:
                 ts.df += 1
                 seen.add(sym)
 
-            for bucket in cell.buckets.values():
-                for entry in bucket:
+            for bmap in cell._bucket_maps.values():
+                for entry in bmap.values():
                     nsym = entry.neighbor_symbol
                     if nsym not in self.term_stats:
                         self.term_stats[nsym] = CorpusTermStats(
