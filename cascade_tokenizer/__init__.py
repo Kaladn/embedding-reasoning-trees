@@ -31,34 +31,38 @@ from cascade_tokenizer.cascade_inference import (
     InferenceConfig,
 )
 from cascade_tokenizer.reasoning_engine import (
-    ReasoningEngine,
-    AnswerFrame,
+    content_tokenize,
+    compute_window_counts,
+    map_text,
     MapReport,
+    SUPPRESSED_ANCHOR_CLASSES,
 )
+from cascade_tokenizer.binary_cell import (
+    BinaryCellV2,
+    NeighborEntry,
+    CellStore,
+    MasterIndex,
+    CorpusStats,
+)
+from cascade_tokenizer.predict import Predictor, STOP_WORDS
 
 __all__ = [
-    "CascadeToken",
-    "CascadeNode",
-    "ReasoningCascade",
-    "NodeType",
-    "ConstraintType",
-    "CascadeTokenizer",
-    "CascadeVocabulary",
-    "LexiconBackend",
-    "SymbolRecord",
-    "SymbolStatus",
-    "CascadeModel",
-    "CascadeModelConfig",
-    "CascadeEmbedding",
-    "CascadeAttention",
-    "CascadeTransformerLayer",
-    "CascadeTrainer",
-    "CascadeDataset",
-    "CascadeDataPreprocessor",
-    "TrainingConfig",
-    "CascadeInferenceEngine",
-    "InferenceConfig",
-    "ReasoningEngine",
-    "AnswerFrame",
-    "MapReport",
+    # Token structures
+    "CascadeToken", "CascadeNode", "ReasoningCascade", "NodeType", "ConstraintType",
+    # Tokenizer
+    "CascadeTokenizer", "CascadeVocabulary",
+    # Lexicon
+    "LexiconBackend", "SymbolRecord", "SymbolStatus",
+    # Neural model (for future training)
+    "CascadeModel", "CascadeModelConfig", "CascadeEmbedding",
+    "CascadeAttention", "CascadeTransformerLayer",
+    "CascadeTrainer", "CascadeDataset", "CascadeDataPreprocessor", "TrainingConfig",
+    "CascadeInferenceEngine", "InferenceConfig",
+    # 6-1-6 mapping
+    "content_tokenize", "compute_window_counts", "map_text",
+    "MapReport", "SUPPRESSED_ANCHOR_CLASSES",
+    # Binary cell storage
+    "BinaryCellV2", "NeighborEntry", "CellStore", "MasterIndex", "CorpusStats",
+    # Prediction engine
+    "Predictor", "STOP_WORDS",
 ]

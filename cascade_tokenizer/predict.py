@@ -57,38 +57,40 @@ STOP_WORDS: frozenset = frozenset({
 class Predictor:
     """Reads binary cell store. Returns predictions and chains."""
 
-    def __init__(self, store_path: str, lexicon_dir: str = None):
+    def __init__(self, store_path: str):
         self.store = CellStore(store_path)
         self.store.load_index()
 
-        # Word → symbol lookup (for querying by word instead of hex)
-        # Built from the cell store index + display text
-        self._word_to_hex: Dict[str, str] = {}
-        self._hex_to_word: Dict[str, str] = {}
-
-    def _ensure_word_index(self):
-        """Lazy-build word→hex index by scanning all cells."""
-        if self._word_to_hex:
-            return
-        for sym in self.store.index._index:
-            cell = self.store.read_cell(sym)
-            if cell:
-                word = cell.display_text.lower()
-                self._word_to_hex[word] = sym
-                self._hex_to_word[sym] = word
-
     def _resolve(self, anchor: str) -> Optional[BinaryCellV2]:
         """Resolve anchor (word or hex) to a cell."""
-        # Try direct hex lookup
+        # Try direct hex
         cell = self.store.read_cell(anchor)
         if cell:
             return cell
-        # Try word lookup
-        self._ensure_word_index()
-        sym = self._word_to_hex.get(anchor.lower())
+        # Try persisted word index
+        sym = self.store.resolve_word(anchor)
         if sym:
             return self.store.read_cell(sym)
+        # Fallback: scan and build word index if not persisted
+        if not hasattr(self.store, '_word_to_hex') or not self.store._word_to_hex:
+            self._build_word_index()
+            sym = self.store.resolve_word(anchor)
+            if sym:
+                return self.store.read_cell(sym)
         return None
+
+    def _build_word_index(self):
+        """One-time scan to build word index for old-format stores."""
+        import logging
+        logging.getLogger(__name__).info("Building word index (one-time)...")
+        self.store._word_to_hex = {}
+        self.store._hex_to_word = {}
+        for sym in self.store.index._index:
+            cell = self.store.read_cell(sym)
+            if cell:
+                w = cell.display_text.lower()
+                self.store._word_to_hex[w] = sym
+                self.store._hex_to_word[sym] = w
 
     def top_neighbors(self, anchor: str, position: int, k: int = 10,
                       skip_stops: bool = True) -> List[Tuple[str, int]]:

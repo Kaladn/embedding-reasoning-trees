@@ -364,18 +364,25 @@ class CellStore:
         self._file = None
 
     def write_all(self, cells: Dict[str, BinaryCellV2]):
-        """Write all cells to disk in one pass."""
+        """Write all cells to disk in one pass. Builds index + word lookup."""
+        # word → symbol_hex reverse lookup (persisted in sidecar)
+        self._word_to_hex: Dict[str, str] = {}
+        self._hex_to_word: Dict[str, str] = {}
+
         with open(self.path, "wb") as f:
             f.write(struct.pack(">I", len(cells)))
 
             for symbol_hex, cell in cells.items():
                 cell_bytes = cell.to_bytes()
-                # Write length prefix
                 f.write(struct.pack(">I", len(cell_bytes)))
-                # Record data_offset AFTER the length prefix
                 data_offset = f.tell()
                 f.write(cell_bytes)
                 self.index.add(symbol_hex, data_offset, len(cell_bytes))
+
+                # Build word lookup
+                word = cell.display_text.lower()
+                self._word_to_hex[word] = symbol_hex
+                self._hex_to_word[symbol_hex] = word
 
         self._save_index()
 
@@ -388,6 +395,7 @@ class CellStore:
             },
             "bloom_hex": self.index.bloom.hex(),
             "bloom_size": len(self.index.bloom),
+            "word_to_hex": self._word_to_hex,
         }
         with open(idx_path, "w") as f:
             json.dump(data, f)
@@ -404,8 +412,20 @@ class CellStore:
         for sym, info in data["entries"].items():
             self.index._index[sym] = (info["offset"], info["length"])
 
+        # Load persisted word lookup
+        self._word_to_hex = data.get("word_to_hex", {})
+        self._hex_to_word = {v: k for k, v in self._word_to_hex.items()}
+
         self._file = open(self.path, "rb")
         self._mmap = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
+
+    def resolve_word(self, word: str) -> Optional[str]:
+        """Word → symbol hex. Returns None if not found."""
+        return self._word_to_hex.get(word.lower())
+
+    def resolve_hex(self, symbol_hex: str) -> Optional[str]:
+        """Symbol hex → word. Returns None if not found."""
+        return self._hex_to_word.get(symbol_hex)
 
     def read_cell(self, symbol_hex: str) -> Optional[BinaryCellV2]:
         """Read a single cell by symbol hex. Bloom-gated. CRC-verified."""
