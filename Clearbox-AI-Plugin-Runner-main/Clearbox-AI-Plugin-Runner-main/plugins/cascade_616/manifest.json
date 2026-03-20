@@ -1,0 +1,9 @@
+{
+  "display_name": "Cascade 6-1-6",
+  "description": "Binary cell prediction engine — anchor to neighbors to chains",
+  "mount_prefix": "/api/cascade-616",
+  "type": "router",
+  "requires": [],
+  "config_section": "cascade_616",
+  "data_dirs": []
+}

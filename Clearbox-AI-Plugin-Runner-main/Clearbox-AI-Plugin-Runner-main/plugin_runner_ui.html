@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clearbox Plugin Runner</title>
+<style>
+:root {
+    --primary-bg: #1a1a2e;
+    --secondary-bg: #16213e;
+    --accent-bg: #0f3460;
+    --highlight: #e94560;
+    --success: #00ff88;
+    --warning: #ffd700;
+    --danger: #ff4444;
+    --text-primary: #e8e8e8;
+    --text-secondary: #a0a0a0;
+    --border: #2a2a3e;
+    --gpt-oss: #00d4ff;
+    --btn-primary: #c73050;
+    --shadow: rgba(0, 0, 0, 0.3);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--primary-bg);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+}
+.shell {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    grid-template-rows: 48px 1fr 28px;
+    height: 100vh;
+}
+
+/* ── Header ── */
+.hdr {
+    grid-column: 1 / -1;
+    background: var(--secondary-bg);
+    border-bottom: 2px solid var(--highlight);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 10px;
+    font-size: 14px;
+}
+.hdr-logo { font-weight: 700; letter-spacing: 0.5px; }
+.hdr-badge {
+    background: var(--accent-bg);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    color: var(--success);
+}
+.hdr-ver {
+    background: var(--accent-bg);
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 9px;
+    color: var(--text-secondary);
+}
+.hdr-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+.hdr-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.hdr-dot.ok { background: var(--success); }
+.hdr-dot.partial { background: var(--warning); }
+
+/* ── Sidebar ── */
+.sidebar {
+    background: var(--secondary-bg);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+.sb-section { padding: 8px 12px; }
+.sb-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    padding: 0 4px;
+    margin-bottom: 6px;
+}
+.sb-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 1px;
+}
+.sb-item:hover { background: var(--accent-bg); }
+.sb-item.active { background: var(--accent-bg); box-shadow: inset 3px 0 0 var(--highlight); }
+.sb-item.unmounted { opacity: 0.4; cursor: default; }
+.sb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sb-dot.ok { background: var(--success); }
+.sb-dot.down { background: var(--danger); }
+.sb-dot.unknown { background: var(--text-secondary); }
+.sb-dot.unmounted { background: var(--border); }
+.sb-name { font-size: 12px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-ver { font-size: 9px; color: var(--text-secondary); font-family: 'Consolas', monospace; }
+.sb-spacer { flex: 1; }
+.sb-tools {
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.sb-tools .btn { width: 100%; justify-content: center; font-size: 10px; padding: 5px 8px; }
+
+/* ── Main ── */
+.main { overflow-y: auto; padding: 20px; }
+
+/* ── Footer ── */
+.ftr {
+    grid-column: 1 / -1;
+    background: var(--secondary-bg);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+/* ── Cards ── */
+.card {
+    background: var(--secondary-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 6px var(--shadow);
+}
+.card h3 {
+    font-size: 13px;
+    color: var(--highlight);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── Plugin Detail ── */
+.pd-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+.pd-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    background: var(--accent-bg);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700; color: var(--gpt-oss);
+}
+.pd-title { font-size: 18px; font-weight: 600; }
+.pd-subtitle { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.pd-mount { font-size: 11px; font-family: 'Consolas', monospace; color: var(--gpt-oss); margin-top: 2px; }
+.pd-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.pd-badge.ok { background: rgba(0,255,136,0.15); color: var(--success); border: 1px solid rgba(0,255,136,0.3); }
+.pd-badge.down { background: rgba(255,68,68,0.15); color: var(--danger); border: 1px solid rgba(255,68,68,0.3); }
+.pd-badge.unmounted { background: rgba(160,160,160,0.15); color: var(--text-secondary); border: 1px solid rgba(160,160,160,0.3); }
+
+/* ── Tabs inside detail ── */
+.dtabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.dtab {
+    padding: 8px 16px; cursor: pointer; font-size: 11px; font-weight: 500;
+    color: var(--text-secondary); border-bottom: 2px solid transparent; transition: all 0.15s;
+}
+.dtab:hover { color: var(--text-primary); }
+.dtab.active { color: var(--success); border-bottom-color: var(--highlight); }
+.dpanel { display: none; }
+.dpanel.active { display: block; }
+
+/* ── Endpoint list ── */
+.ep-list { list-style: none; }
+.ep-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 12px;
+    transition: background 0.15s;
+}
+.ep-item:last-child { border-bottom: none; }
+.ep-item:hover { background: rgba(255,255,255,0.02); }
+.ep-method {
+    font-family: 'Consolas', monospace; font-size: 10px; font-weight: 700;
+    padding: 2px 6px; border-radius: 3px; min-width: 40px; text-align: center;
+}
+.ep-method.GET { background: rgba(0,212,255,0.15); color: var(--gpt-oss); }
+.ep-method.POST { background: rgba(0,255,136,0.15); color: var(--success); }
+.ep-method.PUT { background: rgba(255,215,0,0.15); color: var(--warning); }
+.ep-method.DELETE { background: rgba(255,68,68,0.15); color: var(--danger); }
+.ep-path { font-family: 'Consolas', monospace; color: var(--text-primary); flex: 1; font-size: 11px; }
+.ep-try {
+    font-size: 10px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 4px;
+    background: none; color: var(--text-secondary); cursor: pointer; transition: all 0.15s;
+}
+.ep-try:hover { border-color: var(--gpt-oss); color: var(--gpt-oss); }
+
+/* ── Response viewer ── */
+.resp-box {
+    background: #000; border: 1px solid var(--border); border-radius: 6px;
+    padding: 12px; font-family: 'Consolas', monospace; font-size: 11px;
+    color: var(--success); max-height: 300px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-all; display: none;
+}
+.resp-box.visible { display: block; }
+.resp-box.error { color: var(--danger); }
+
+/* ── Checklist ── */
+.chk-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
+.chk-item:last-child { border-bottom: none; }
+.chk-icon { width: 18px; text-align: center; font-size: 12px; font-weight: 700; }
+.chk-icon.pass { color: var(--success); }
+.chk-icon.fail { color: var(--danger); }
+
+/* ── Info grid ── */
+.info-grid { display: grid; grid-template-columns: 130px 1fr; gap: 5px; font-size: 12px; }
+.info-grid .lbl { color: var(--text-secondary); }
+.info-grid .val { font-family: 'Consolas', monospace; }
+
+/* ── Welcome ── */
+.welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; color: var(--text-secondary); gap: 12px; }
+.welcome-icon { font-size: 48px; opacity: 0.25; }
+.welcome-title { font-size: 16px; color: var(--text-primary); }
+.welcome-hint { font-size: 12px; opacity: 0.6; }
+
+/* ── Buttons ── */
+.btn {
+    padding: 5px 12px; border: none; border-radius: 5px; cursor: pointer;
+    font-size: 11px; font-weight: 600; transition: all 0.2s; display: inline-flex;
+    align-items: center; gap: 6px;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn-gpt { background: var(--gpt-oss); color: var(--primary-bg); }
+.btn-success { background: var(--success); color: var(--primary-bg); }
+.btn-warn { background: var(--warning); color: var(--primary-bg); }
+.btn-sec { background: var(--accent-bg); color: var(--text-secondary); border: 1px solid var(--border); }
+.btn-sec:hover { color: var(--text-primary); border-color: var(--gpt-oss); }
+.btn-sm { padding: 3px 8px; font-size: 10px; }
+
+/* ── Toast ── */
+.toast-box { position: fixed; bottom: 40px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 6px; }
+.toast {
+    padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4); animation: tIn 0.2s ease;
+}
+.toast.ok { background: var(--success); color: var(--primary-bg); }
+.toast.err { background: var(--danger); color: white; }
+.toast.info { background: var(--gpt-oss); color: var(--primary-bg); }
+@keyframes tIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--secondary-bg); }
+::-webkit-scrollbar-thumb { background: var(--accent-bg); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--highlight); }
+</style>
+</head>
+<body>
+
+<div class="shell">
+    <div class="hdr">
+        <span class="hdr-logo">Clearbox Plugin Runner</span>
+        <span class="hdr-badge" id="hdr-count">--</span>
+        <span class="hdr-ver">v2.0</span>
+        <div class="hdr-right">
+            <span class="hdr-dot ok" id="hdr-dot"></span>
+            <span id="hdr-uptime">--</span>
+            <button class="btn btn-sec btn-sm" onclick="refresh()">Rescan</button>
+            <button class="btn btn-sec btn-sm" onclick="checkChanges()">Changes?</button>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <div class="sb-section">
+            <div class="sb-label">Plugins</div>
+            <div id="sb-plugins"><div style="padding:12px;color:var(--text-secondary);font-size:12px;">Scanning...</div></div>
+        </div>
+        <div class="sb-spacer"></div>
+        <div class="sb-tools">
+            <button class="btn btn-success" onclick="injectFixtures()">Inject Fixtures</button>
+            <button class="btn btn-warn" onclick="healthAll()">Health Check All</button>
+        </div>
+    </div>
+
+    <div class="main" id="main">
+        <div class="welcome" id="welcome">
+            <div class="welcome-icon">CB</div>
+            <div class="welcome-title">Clearbox Plugin Runner v2</div>
+            <div class="welcome-hint">Manifest contract / Runtime status / Hot reload detect / Fixtures / Mock host / Promotion checklist</div>
+        </div>
+        <div id="detail" style="display:none;"></div>
+    </div>
+
+    <div class="ftr">
+        <span>Clearbox Plugin Runner — standalone, no bridge</span>
+        <span id="ftr-info">--</span>
+    </div>
+</div>
+
+<div class="toast-box" id="toast-box"></div>
+
+<script>
+const API = '';
+let _plugins = [];
+let _selectedId = null;
+let _routes = [];
+let _activeTab = 'endpoints';
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+function toast(msg, type='info') {
+    const c = document.getElementById('toast-box');
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 200); }, 2500);
+}
+
+// ── Data ──
+async function fetchPlugins() {
+    const r = await fetch(API + '/api/runner/plugins');
+    const d = await r.json();
+    _plugins = d.plugins || [];
+    document.getElementById('hdr-count').textContent = d.mounted + '/' + d.total + ' mounted';
+    document.getElementById('hdr-dot').className = 'hdr-dot ' + (d.mounted === d.total ? 'ok' : 'partial');
+    document.getElementById('hdr-uptime').textContent = 'up ' + Math.round(d.uptime) + 's';
+    document.getElementById('ftr-info').textContent = d.total + ' discovered, ' + d.mounted + ' mounted';
+}
+
+async function fetchRoutes() {
+    try {
+        const r = await fetch(API + '/openapi.json');
+        const spec = await r.json();
+        _routes = [];
+        for (const [path, methods] of Object.entries(spec.paths || {})) {
+            for (const [method, info] of Object.entries(methods)) {
+                if (['get','post','put','delete','patch'].includes(method))
+                    _routes.push({ method: method.toUpperCase(), path, tags: info.tags || [] });
+            }
+        }
+    } catch { _routes = []; }
+}
+
+async function checkHealth(p) {
+    if (!p.mounted) return 'unmounted';
+    for (const ep of [p.mount_path + '/status', p.mount_path + '/health']) {
+        try {
+            const r = await fetch(API + ep, { signal: AbortSignal.timeout(2000) });
+            if (r.ok) return 'ok';
+        } catch {}
+    }
+    return 'down';
+}
+
+// ── Sidebar ──
+async function renderSidebar() {
+    const el = document.getElementById('sb-plugins');
+    el.innerHTML = '';
+    await Promise.all(_plugins.map(async p => { p._health = await checkHealth(p); }));
+    for (const p of _plugins) {
+        const item = document.createElement('div');
+        item.className = 'sb-item' + (p.id === _selectedId ? ' active' : '') + (!p.mounted ? ' unmounted' : '');
+        item.innerHTML = `<span class="sb-dot ${p._health||'unknown'}"></span><span class="sb-name">${esc(p.display_name||p.id)}</span><span class="sb-ver">v${esc(p.version)}</span>`;
+        if (p.mounted) item.onclick = () => { _selectedId = p.id; _activeTab = 'endpoints'; renderSidebar(); renderDetail(p); };
+        else item.onclick = () => { _selectedId = p.id; _activeTab = 'manifest'; renderSidebar(); renderDetail(p); };
+        el.appendChild(item);
+    }
+}
+
+// ── Detail ──
+function renderDetail(p) {
+    document.getElementById('welcome').style.display = 'none';
+    const el = document.getElementById('detail');
+    el.style.display = 'block';
+
+    const pluginRoutes = _routes.filter(r => p.mount_path && r.path.startsWith(p.mount_path));
+    const initial = p.id.replace(/_/g, ' ').split(' ').map(w => w[0]?.toUpperCase()||'').join('').slice(0,2);
+    const hb = p._health === 'ok' ? '<span class="pd-badge ok">HEALTHY</span>'
+             : p._health === 'down' ? '<span class="pd-badge down">DOWN</span>'
+             : '<span class="pd-badge unmounted">UNMOUNTED</span>';
+
+    el.innerHTML = `
+        <div class="pd-header">
+            <div class="pd-icon">${initial}</div>
+            <div>
+                <div class="pd-title">${esc(p.display_name||p.id)}</div>
+                <div class="pd-subtitle">${esc(p.description||p.id)}</div>
+                <div class="pd-mount">${esc(p.mount_path||'not mounted')}</div>
+            </div>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+                ${hb}
+                <button class="btn btn-sec btn-sm" onclick="runPromotion('${p.id}')">Promote?</button>
+            </div>
+        </div>
+
+        <div class="dtabs">
+            <div class="dtab ${_activeTab==='endpoints'?'active':''}" onclick="switchDTab('endpoints','${p.id}')">Endpoints</div>
+            <div class="dtab ${_activeTab==='manifest'?'active':''}" onclick="switchDTab('manifest','${p.id}')">Manifest</div>
+            <div class="dtab ${_activeTab==='promotion'?'active':''}" onclick="switchDTab('promotion','${p.id}')">Promotion</div>
+            <div class="dtab ${_activeTab==='response'?'active':''}" onclick="switchDTab('response','${p.id}')">Response</div>
+        </div>
+
+        <div class="dpanel ${_activeTab==='endpoints'?'active':''}" id="dp-endpoints">
+            <div class="card">
+                <h3>Endpoints (${pluginRoutes.length})</h3>
+                ${pluginRoutes.length === 0
+                    ? '<div style="color:var(--text-secondary);font-size:12px;">No routes</div>'
+                    : `<ul class="ep-list">${pluginRoutes.map(r => `
+                        <li class="ep-item">
+                            <span class="ep-method ${r.method}">${r.method}</span>
+                            <span class="ep-path">${esc(r.path)}</span>
+                            <button class="ep-try" onclick="tryEndpoint('${r.method}','${r.path}','${p.id}')">Try</button>
+                        </li>`).join('')}</ul>`}
+            </div>
+        </div>
+
+        <div class="dpanel ${_activeTab==='manifest'?'active':''}" id="dp-manifest">
+            <div class="card">
+                <h3>Manifest</h3>
+                <div class="info-grid">
+                    <span class="lbl">ID</span><span class="val">${esc(p.id)}</span>
+                    <span class="lbl">Version</span><span class="val">${esc(p.version)}</span>
+                    <span class="lbl">Display Name</span><span>${esc(p.display_name)}</span>
+                    <span class="lbl">Type</span><span class="val">${esc(p.type)}</span>
+                    <span class="lbl">Router Module</span><span class="val">${esc(p.router_module||'--')}</span>
+                    <span class="lbl">Mount Path</span><span class="val" style="color:var(--gpt-oss);">${esc(p.mount_path||'--')}</span>
+                    <span class="lbl">Mounted</span><span style="color:${p.mounted?'var(--success)':'var(--danger)'};">${p.mounted?'Yes':'No'}</span>
+                    <span class="lbl">Has Status</span><span>${p.has_status?'Yes':'--'}</span>
+                    <span class="lbl">Has Hooks</span><span>${p.has_hooks?'Yes':'No'}</span>
+                    <span class="lbl">Requires</span><span>${(p.requires||[]).join(', ')||'none'}</span>
+                    <span class="lbl">Config Section</span><span class="val">${esc(p.config_section||'--')}</span>
+                    ${p.error ? `<span class="lbl">Error</span><span style="color:var(--danger);font-size:11px;">${esc(p.error)}</span>` : ''}
+                </div>
+            </div>
+        </div>
+
+        <div class="dpanel ${_activeTab==='promotion'?'active':''}" id="dp-promotion">
+            <div class="card" id="promo-card">
+                <h3>Promotion Checklist</h3>
+                <div style="color:var(--text-secondary);font-size:12px;">Click "Promote?" to run the checklist.</div>
+            </div>
+        </div>
+
+        <div class="dpanel ${_activeTab==='response'?'active':''}" id="dp-response">
+            <div class="card">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                    <h3 style="margin:0;">Response</h3>
+                    <button class="btn btn-sec btn-sm" onclick="clearResp()">Clear</button>
+                </div>
+                <div class="resp-box" id="resp-box"></div>
+            </div>
+        </div>
+    `;
+}
+
+function switchDTab(tab, pid) {
+    _activeTab = tab;
+    const p = _plugins.find(x => x.id === pid);
+    if (p) renderDetail(p);
+}
+
+// ── Try endpoint ──
+async function tryEndpoint(method, path, pid) {
+    _activeTab = 'response';
+    const p = _plugins.find(x => x.id === pid);
+    if (p) renderDetail(p);
+
+    const box = document.getElementById('resp-box');
+    box.className = 'resp-box visible';
+    box.textContent = `${method} ${path}\nLoading...`;
+    try {
+        const opts = { method };
+        if (method === 'POST') { opts.headers = {'Content-Type':'application/json'}; opts.body = '{}'; }
+        const r = await fetch(API + path, opts);
+        const text = await r.text();
+        try {
+            const json = JSON.parse(text);
+            box.textContent = `${method} ${path}  [${r.status}]\n\n${JSON.stringify(json, null, 2)}`;
+        } catch { box.textContent = `${method} ${path}  [${r.status}]\n\n${text}`; }
+        box.className = 'resp-box visible' + (r.ok ? '' : ' error');
+    } catch (e) {
+        box.textContent = `${method} ${path}\n\nERROR: ${e.message}`;
+        box.className = 'resp-box visible error';
+    }
+}
+
+function clearResp() { const b = document.getElementById('resp-box'); b.className='resp-box'; b.textContent=''; }
+
+// ── Promotion ──
+async function runPromotion(pid) {
+    _activeTab = 'promotion';
+    const p = _plugins.find(x => x.id === pid);
+    if (p) renderDetail(p);
+
+    const card = document.getElementById('promo-card');
+    card.innerHTML = '<h3>Promotion Checklist</h3><div style="color:var(--text-secondary);font-size:12px;">Running...</div>';
+
+    try {
+        const r = await fetch(API + '/api/runner/promote/' + pid);
+        const d = await r.json();
+        const items = (d.checks||[]).map(c => `
+            <div class="chk-item">
+                <span class="chk-icon ${c.pass?'pass':'fail'}">${c.pass?'OK':'--'}</span>
+                <span>${esc(c.check)}</span>
+            </div>
+        `).join('');
+
+        const summaryColor = d.ready_for_bridge ? 'var(--success)' : 'var(--warning)';
+        card.innerHTML = `
+            <h3>Promotion Checklist — ${esc(pid)}</h3>
+            <div style="margin-bottom:12px;padding:8px 12px;background:var(--accent-bg);border-radius:6px;font-size:13px;font-weight:600;color:${summaryColor};">
+                ${esc(d.summary)}
+            </div>
+            ${items}
+        `;
+        toast(d.ready_for_bridge ? pid + ' is READY for bridge' : pid + ': ' + d.passed + '/' + d.total + ' checks', d.ready_for_bridge ? 'ok' : 'info');
+    } catch (e) {
+        card.innerHTML = `<h3>Promotion Checklist</h3><div style="color:var(--danger);">Error: ${esc(e.message)}</div>`;
+    }
+}
+
+// ── Fixtures ──
+async function injectFixtures() {
+    toast('Injecting fixtures...', 'info');
+    try {
+        const r = await fetch(API + '/api/runner/fixtures', { method: 'POST' });
+        const d = await r.json();
+        const ok = (d.results||[]).filter(r => r.ok).length;
+        const total = (d.results||[]).length;
+        toast(ok + '/' + total + ' fixtures injected', ok === total ? 'ok' : 'err');
+    } catch (e) { toast('Fixture injection failed', 'err'); }
+}
+
+// ── Health All ──
+async function healthAll() {
+    toast('Running health checks...', 'info');
+    try {
+        const r = await fetch(API + '/api/runner/health');
+        const d = await r.json();
+        const health = d.health || {};
+        const ok = Object.values(health).filter(v => v === 'ok').length;
+        toast(ok + '/' + Object.keys(health).length + ' healthy', 'ok');
+        await refresh();
+    } catch (e) { toast('Health check failed', 'err'); }
+}
+
+// ── Changes ──
+async function checkChanges() {
+    try {
+        const r = await fetch(API + '/api/runner/changes');
+        const d = await r.json();
+        if (d.changed && d.changed.length > 0) {
+            toast('Changed: ' + d.changed.join(', ') + ' — restart to reload', 'info');
+        } else {
+            toast('No changes detected', 'ok');
+        }
+    } catch (e) { toast('Change detection failed', 'err'); }
+}
+
+// ── Init ──
+async function refresh() {
+    await fetchPlugins();
+    await fetchRoutes();
+    await renderSidebar();
+    if (_selectedId) {
+        const p = _plugins.find(x => x.id === _selectedId);
+        if (p) renderDetail(p);
+    }
+}
+refresh();
+</script>
+</body>
+</html>

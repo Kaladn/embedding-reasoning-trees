@@ -12,8 +12,13 @@ reasoning_cache/
 # Large data (tracked separately)
 Lexical Data/
 *.pkl
-*.bin
 *.pt
+
+# Plugin runner — track structure and cascade_616, skip other plugins' heavy content
+Clearbox-AI-Plugin-Runner-main/Clearbox-AI-Plugin-Runner-main/winutil-main/
+Clearbox-AI-Plugin-Runner-main/Clearbox-AI-Plugin-Runner-main/winutil-main.zip
+Clearbox-AI-Plugin-Runner-main/Clearbox-AI-Plugin-Runner-main/claude_sandbox/
+Clearbox-AI-Plugin-Runner-main/Clearbox-AI-Plugin-Runner-main/chatpack_clearboxai_guided_tour_a1b2c3d4e5f6/
 
 # OS
 Thumbs.db
