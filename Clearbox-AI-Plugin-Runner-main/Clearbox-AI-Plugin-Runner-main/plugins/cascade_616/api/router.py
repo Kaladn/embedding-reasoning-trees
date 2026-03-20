@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter
+from fastapi.responses import FileResponse
 from cascade_616.api.models import (
     PredictRequest,
     PredictResponse,
@@ -18,8 +20,17 @@ from cascade_616.api.models import (
 )
 from cascade_616 import VERSION
 
+_PANEL_HTML = Path(__file__).parent / "panel.html"
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/cascade-616", tags=["cascade_616"])
+
+
+@router.get("/panel", include_in_schema=False)
+async def serve_panel():
+    """Serve the explorer UI."""
+    return FileResponse(_PANEL_HTML, media_type="text/html")
+
 
 # ── Singleton Engine ────────────────────────────────────────
 

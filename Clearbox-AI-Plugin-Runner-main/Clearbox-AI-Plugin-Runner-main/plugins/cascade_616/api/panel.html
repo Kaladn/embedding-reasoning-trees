@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cascade 6-1-6 Explorer</title>
+<style>
+:root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2333;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent2: #f78166;
+    --green: #3fb950;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --anchor-glow: #58a6ff;
+    --chain-glow: #f78166;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+}
+
+/* ── Layout ── */
+.app { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+.header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 0; border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+}
+.header h1 { font-size: 20px; font-weight: 600; }
+.header .status {
+    font-size: 12px; padding: 3px 10px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+}
+.header .status.ok { border-color: var(--green); color: var(--green); }
+
+/* ── Search bar ── */
+.search-bar {
+    display: flex; gap: 8px; margin-bottom: 24px;
+}
+.search-bar input {
+    flex: 1; padding: 12px 16px; font-size: 16px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); outline: none;
+}
+.search-bar input:focus { border-color: var(--accent); }
+.search-bar input::placeholder { color: var(--text2); }
+.search-bar button {
+    padding: 12px 24px; font-size: 14px; font-weight: 600;
+    background: var(--accent); color: #000; border: none;
+    border-radius: 8px; cursor: pointer;
+}
+.search-bar button:hover { opacity: 0.9; }
+.search-bar button.chain-btn { background: var(--chain-glow); }
+
+/* ── Panels grid ── */
+.panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+.panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 200px;
+}
+.panel.full { grid-column: 1 / -1; }
+.panel h2 {
+    font-size: 14px; font-weight: 600; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 12px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* ── Anchor header ── */
+.anchor-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 20px; padding: 16px;
+    background: var(--surface2); border-radius: 10px;
+    border: 1px solid var(--border);
+}
+.anchor-header .glyph {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: radial-gradient(circle, var(--anchor-glow) 0%, transparent 70%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700;
+}
+.anchor-header .meta { flex: 1; }
+.anchor-header .word { font-size: 24px; font-weight: 700; }
+.anchor-header .sym { font-size: 11px; color: var(--text2); font-family: monospace; }
+.anchor-header .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 4px;
+    background: var(--accent); color: #000; font-weight: 600;
+}
+
+/* ── Position buckets ── */
+.bucket-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0; border-bottom: 1px solid rgba(48,54,61,0.5);
+}
+.bucket-row:last-child { border-bottom: none; }
+.bucket-label {
+    font-size: 11px; font-family: monospace; color: var(--text2);
+    width: 70px; flex-shrink: 0; text-align: right;
+}
+.bucket-items { display: flex; gap: 6px; flex-wrap: wrap; }
+.token-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 14px; font-size: 13px;
+    background: var(--surface2); border: 1px solid var(--border);
+    cursor: pointer; transition: all 0.15s;
+}
+.token-pill:hover {
+    border-color: var(--accent); background: rgba(88,166,255,0.1);
+}
+.token-pill .count {
+    font-size: 10px; color: var(--text2); font-family: monospace;
+}
+
+/* ── Chain view ── */
+.chain-container {
+    display: flex; align-items: center; gap: 0;
+    flex-wrap: wrap; padding: 8px 0;
+}
+.chain-node {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: 8px; font-size: 14px;
+    background: var(--surface2); border: 1px solid var(--border);
+    cursor: pointer;
+}
+.chain-node.origin {
+    background: rgba(88,166,255,0.15);
+    border-color: var(--accent);
+    font-weight: 700;
+}
+.chain-node .chain-count {
+    font-size: 10px; color: var(--text2); font-family: monospace;
+}
+.chain-arrow {
+    padding: 0 6px; color: var(--text2); font-size: 16px;
+}
+
+/* ── Predict results ── */
+.predict-list { list-style: none; }
+.predict-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; border-radius: 6px;
+    margin-bottom: 4px; cursor: pointer;
+}
+.predict-item:hover { background: var(--surface2); }
+.predict-rank {
+    font-size: 11px; color: var(--text2); font-family: monospace;
+    width: 20px; text-align: right;
+}
+.predict-word { font-size: 14px; flex: 1; }
+.predict-bar-wrap {
+    width: 120px; height: 6px; background: var(--surface2);
+    border-radius: 3px; overflow: hidden;
+}
+.predict-bar {
+    height: 100%; background: var(--accent); border-radius: 3px;
+    transition: width 0.3s;
+}
+.predict-count {
+    font-size: 11px; color: var(--text2); font-family: monospace;
+    width: 50px; text-align: right;
+}
+
+/* ── Empty/loading states ── */
+.empty {
+    text-align: center; padding: 40px; color: var(--text2);
+    font-size: 14px;
+}
+.loading { opacity: 0.5; }
+</style>
+</head>
+<body>
+<div class="app">
+
+    <!-- Header -->
+    <div class="header">
+        <h1>Cascade 6-1-6</h1>
+        <span class="status" id="statusBadge">checking...</span>
+    </div>
+
+    <!-- Search -->
+    <div class="search-bar">
+        <input type="text" id="anchorInput" placeholder="Enter anchor word (e.g. ai, model, security, lexicon)"
+               autofocus />
+        <button onclick="doContext()">Explore</button>
+        <button class="chain-btn" onclick="doChains()">Chains</button>
+    </div>
+
+    <!-- Anchor info (hidden until search) -->
+    <div class="anchor-header" id="anchorInfo" style="display:none">
+        <div class="glyph" id="anchorGlyph"></div>
+        <div class="meta">
+            <div class="word" id="anchorWord"></div>
+            <div class="sym" id="anchorSym"></div>
+        </div>
+        <span class="badge" id="anchorCat"></span>
+        <span style="font-size:12px;color:var(--text2)" id="anchorCount"></span>
+    </div>
+
+    <!-- Panels -->
+    <div class="panels">
+        <!-- Predict Next / Previous -->
+        <div class="panel" id="predictNextPanel">
+            <h2>Predict Next (+1)</h2>
+            <div id="predictNextContent"><div class="empty">Type an anchor and hit Explore</div></div>
+        </div>
+        <div class="panel" id="predictPrevPanel">
+            <h2>Predict Previous (-1)</h2>
+            <div id="predictPrevContent"><div class="empty"></div></div>
+        </div>
+
+        <!-- Forward / Backward chains -->
+        <div class="panel" id="fwdChainPanel">
+            <h2>Forward Chain</h2>
+            <div id="fwdChainContent"><div class="empty"></div></div>
+        </div>
+        <div class="panel" id="bwdChainPanel">
+            <h2>Backward Chain</h2>
+            <div id="bwdChainContent"><div class="empty"></div></div>
+        </div>
+
+        <!-- Full 6-1-6 cloud -->
+        <div class="panel full" id="contextPanel">
+            <h2>Full 6-1-6 Context</h2>
+            <div id="contextContent"><div class="empty"></div></div>
+        </div>
+    </div>
+</div>
+
+<script>
+const API = '/api/cascade-616';
+
+// ── Status ──
+async function checkStatus() {
+    try {
+        const r = await fetch(API + '/status');
+        const d = await r.json();
+        const el = document.getElementById('statusBadge');
+        if (d.enabled) {
+            el.textContent = `${d.cells.toLocaleString()} cells`;
+            el.classList.add('ok');
+        } else {
+            el.textContent = 'offline';
+        }
+    } catch { document.getElementById('statusBadge').textContent = 'error'; }
+}
+
+// ── Navigate to anchor on pill click ──
+function nav(word) {
+    document.getElementById('anchorInput').value = word;
+    doContext();
+}
+
+// ── Render predict list ──
+function renderPredictList(items, maxCount) {
+    if (!items || !items.length) return '<div class="empty">No data</div>';
+    const max = maxCount || items[0].count;
+    return '<ul class="predict-list">' + items.map((it, i) =>
+        `<li class="predict-item" onclick="nav('${it.token}')">
+            <span class="predict-rank">${i+1}</span>
+            <span class="predict-word">${it.token}</span>
+            <div class="predict-bar-wrap">
+                <div class="predict-bar" style="width:${(it.count/max*100).toFixed(1)}%"></div>
+            </div>
+            <span class="predict-count">${it.count.toLocaleString()}</span>
+        </li>`
+    ).join('') + '</ul>';
+}
+
+// ── Render chain ──
+function renderChain(anchor, items, direction) {
+    if (!items || !items.length) return '<div class="empty">No chain found</div>';
+    const nodes = direction === 'backward'
+        ? [...items].reverse().concat([{token: anchor, count: 0}])
+        : [{token: anchor, count: 0}, ...items];
+
+    return '<div class="chain-container">' + nodes.map((n, i) => {
+        const isOrigin = n.token === anchor;
+        const arrow = i < nodes.length - 1 ? '<span class="chain-arrow">\u2192</span>' : '';
+        return `<span class="chain-node${isOrigin ? ' origin' : ''}" onclick="nav('${n.token}')">
+            ${n.token}
+            ${n.count ? '<span class="chain-count">' + n.count.toLocaleString() + '</span>' : ''}
+        </span>${arrow}`;
+    }).join('') + '</div>';
+}
+
+// ── Render 6-1-6 buckets ──
+function renderContext(positions) {
+    if (!positions || !Object.keys(positions).length)
+        return '<div class="empty">No context data</div>';
+
+    const order = [
+        'before_6','before_5','before_4','before_3','before_2','before_1',
+        'after_1','after_2','after_3','after_4','after_5','after_6'
+    ];
+    let html = '';
+    for (const label of order) {
+        const items = positions[label];
+        if (!items || !items.length) continue;
+        const pills = items.map(it =>
+            `<span class="token-pill" onclick="nav('${it.token}')">
+                ${it.token} <span class="count">${it.count.toLocaleString()}</span>
+            </span>`
+        ).join('');
+        const display = label.replace('_', ' ');
+        html += `<div class="bucket-row">
+            <span class="bucket-label">${display}</span>
+            <div class="bucket-items">${pills}</div>
+        </div>`;
+    }
+    return html;
+}
+
+// ── Main actions ──
+async function doContext() {
+    const anchor = document.getElementById('anchorInput').value.trim().toLowerCase();
+    if (!anchor) return;
+
+    // Full context
+    const ctxR = await fetch(API + '/context', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({anchor, k: 8})
+    });
+    const ctx = await ctxR.json();
+
+    if (ctx.error) {
+        document.getElementById('anchorInfo').style.display = 'none';
+        document.getElementById('contextContent').innerHTML =
+            `<div class="empty">${ctx.error.message || 'Not found'}</div>`;
+        return;
+    }
+
+    // Anchor header
+    document.getElementById('anchorInfo').style.display = 'flex';
+    document.getElementById('anchorGlyph').textContent = anchor[0].toUpperCase();
+    document.getElementById('anchorWord').textContent = ctx.display || anchor;
+    document.getElementById('anchorSym').textContent = ctx.symbol || '';
+    document.getElementById('anchorCat').textContent = ctx.category || 'content';
+    document.getElementById('anchorCount').textContent =
+        ctx.total_count ? `${ctx.total_count.toLocaleString()} occurrences` : '';
+
+    // Context cloud
+    document.getElementById('contextContent').innerHTML = renderContext(ctx.positions);
+
+    // Predict next/previous
+    const [nextR, prevR] = await Promise.all([
+        fetch(API + '/predict', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({anchor, k: 8})
+        }),
+        fetch(API + '/predict/previous', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({anchor, k: 8})
+        })
+    ]);
+    const nextD = await nextR.json();
+    const prevD = await prevR.json();
+    document.getElementById('predictNextContent').innerHTML = renderPredictList(nextD.predictions);
+    document.getElementById('predictPrevContent').innerHTML = renderPredictList(prevD.predictions);
+
+    // Chains
+    doChains();
+}
+
+async function doChains() {
+    const anchor = document.getElementById('anchorInput').value.trim().toLowerCase();
+    if (!anchor) return;
+
+    const [fwdR, bwdR] = await Promise.all([
+        fetch(API + '/chain/forward', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({anchor, steps: 8})
+        }),
+        fetch(API + '/chain/backward', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({anchor, steps: 8})
+        })
+    ]);
+    const fwd = await fwdR.json();
+    const bwd = await bwdR.json();
+    document.getElementById('fwdChainContent').innerHTML = renderChain(anchor, fwd.chain, 'forward');
+    document.getElementById('bwdChainContent').innerHTML = renderChain(anchor, bwd.chain, 'backward');
+}
+
+// ── Enter key ──
+document.getElementById('anchorInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doContext();
+});
+
+// ── Boot ──
+checkStatus();
+</script>
+</body>
+</html>
