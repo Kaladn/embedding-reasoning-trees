@@ -1,111 +1,135 @@
-# Cascade Tokenizer: Production-Ready AI with Embedded Reasoning Trees
+# Embedding Reasoning Trees in Token-Based AI Generation
 
-This project implements Guided Token Generation, embedding deterministic 6-1-6 reasoning trees within each token for controlled, accountable AI generation.
+Deterministic 6-1-6 prediction engine backed by a symbol-first lexicon and binary cell evidence store.
 
-## Key Features
-- Hybrid symbolic/statistical token generation
-- Embedded 6-1-6 reasoning trees for each token
-- Deterministic constraints to prevent hallucination
-- Traceable, accountable output
-- Cascade-guided attention and constraint validation
+No LLM. No training. No hallucination. Corpus in, structured predictions out.
 
-## Main Classes & Parameters
+## What it does
 
-### CascadeToken
-- `surface_form: str` — Token text representation
-- `token_id: int` — Unique identifier
-- `cascade: ReasoningCascade` — Embedded reasoning tree
-- `embedding_vector: np.ndarray` — Dense representation
-- `frequency: int` — Corpus frequency
-- `context_history: List[str]` — Usage contexts
-- `generation_constraints: Dict` — Runtime constraints
-- `semantic_fingerprint: str` — Fast lookup hash
+Takes a text corpus, resolves every word against a persistent lexicon (1M+ symbols), builds positional co-occurrence evidence in a binary cell store, and serves predictions through a FastAPI plugin.
 
-### ReasoningCascade
-- `input_nodes: List[CascadeNode]` — 6 input reasoning nodes
-- `central_node: CascadeNode` — 1 central semantic anchor
-- `output_nodes: List[CascadeNode]` — 6 output generation nodes
-- `cascade_id: str` — Unique cascade identifier
-- `confidence_score: float` — Overall cascade confidence
-- `constraint_violations: List[str]` — Validation failure log
+Given an anchor word, the engine returns:
+- **Positional neighbors** at each of the 12 positions (-6 to -1, +1 to +6)
+- **Forward/backward chains** following top neighbors step by step
+- **Full 6-1-6 context** — the complete neighborhood of any anchor
 
-### CascadeNode
-- `node_id: str` — Unique node identifier
-- `node_type: NodeType` — INPUT, CENTRAL, or OUTPUT
-- `concept: str` — Semantic concept representation
-- `weight: float` — Activation strength [0.0, 1.0]
-- `constraints: Dict[ConstraintType, Any]` — Node-specific constraints
-- `connections: List[str]` — Connected node IDs
-- `activation_threshold: float` — Minimum activation level
-- `metadata: Dict[str, Any]` — Additional node information
+Example from 838 ML training documents (54MB corpus):
 
-## Configuration Parameters
-
-### Model & Inference
-- `device`: 'cpu' or 'cuda' (default: 'cpu')
-- `vocab_size`: Vocabulary size (default: 30,000)
-- `hidden_size`: Model hidden dimension (default: 768)
-- `cascade_embedding_size`: Cascade node embedding size (default: 32)
-- `cascade_guidance_strength`: Weight for cascade guidance (default: 0.8)
-- `constraint_weight`: Weight for constraint loss (default: 1.0)
-- `batch_size`: Inference batch size (default: 8)
-- `max_length`: Maximum generation length (default: 100)
-- `temperature`: Sampling temperature (default: 0.8)
-
-### Constraint Types
-- Semantic, Logical, Contextual, Temporal, Emotional, Domain
-
-## Example Usage
-
-### System Initialization
-```python
-from cascade_model import CascadeSystem
-system = CascadeSystem(device='cuda')
-system.build_from_corpus(corpus, vocab_size=30000)
+```
+ai       → driven(2233), symbolis(1707), models(1447), powered(1254)
+model    → training(429), performance, predict
+security → system → performance → metrics → accuracy → error → handling
+lexicon  → nlp → models → import → json → schema (forward chain)
 ```
 
-### Generation API
-```python
-result = system.generate(
-	prompt="The future of AI is",
-	max_length=50,
-	temperature=0.7,
-	cascade_guidance_strength=0.8
-)
-print(result['generated_text'])
+## Architecture
+
+```
+Corpus (text files)
+    ↓
+Tokenizer (content-only: punctuation/emoji/numbers transparent to window)
+    ↓
+Lexicon resolution (Canonical → Medical → Structural → Temp_Pool)
+    ↓
+6-1-6 window counting (parallel, 16 workers)
+    ↓
+Binary cell accumulation (dict-per-bucket, O(1) neighbor lookup)
+    ↓
+Evidence store (evidence.bin + bloom-gated index)
+    ↓
+Prediction engine (top-K, chains, full context)
+    ↓
+Plugin API (FastAPI, serves explorer UI)
 ```
 
-### REST API Example
-```python
-from flask import Flask, request, jsonify
-app = Flask(__name__)
-cascade_system = CascadeSystem.load('./model')
+## Key design rules
 
-@app.route('/generate', methods=['POST'])
-def generate():
-	data = request.json
-	result = cascade_system.generate(
-		prompt=data['prompt'],
-		max_length=data.get('max_length', 100),
-		temperature=data.get('temperature', 0.8),
-		cascade_guidance_strength=data.get('guidance_strength', 0.8)
-	)
-	return jsonify(result)
+- **Symbol identity is primary** — hex address is the node key, text is rendering metadata
+- **Count everything, index selectively** — function words counted as neighbors, never as anchors
+- **Raw evidence stays raw** — no filtering at storage time, only at view time
+- **Punctuation/emoji recognized but invisible** — get symbols, never break the 6-1-6 window
+- **Temp symbols are first-class** — tagged, always; old maps never rewritten on promotion
+
+## Project structure
+
+```
+cascade_tokenizer/           # Core package
+    binary_cell.py           # BinaryCellV2 store — 12 fixed positional buckets
+    predict.py               # Prediction engine — top-K, chains, full context
+    lexicon_backend.py       # Lexicon loader — Canonical, Medical, Structural, Temp_Pool
+    reasoning_engine.py      # Windowed map generation + tokenizer
+
+Lexical Data/                # Symbol lexicon (not tracked in git)
+    Canonical/               # 260K+ permanent word symbols (A-Z JSON files)
+    Medical/                 # 735K+ medical term symbols
+    Structural/              # Digits, single characters
+    Spare_Slots/             # 7.6M+ available for promotion
+    Temp_Pool/               # Runtime/session assignment lane
+
+Clearbox-AI-Plugin-Runner-main/
+    plugin_runner.py         # Standalone plugin harness
+    plugins/cascade_616/     # Plugin: FastAPI router + explorer UI
+        api/router.py        # 7 endpoints (status, predict, chain, context, panel)
+        api/panel.html       # Interactive 6-1-6 explorer
+        core/engine.py       # Self-contained engine, no other plugin deps
+
+run_ingest.py                # Corpus ingestion script
 ```
 
-## Files
-- `cascade_tokenizer.py`: Tokenizer logic
-- `cascade_token.py`: Token and reasoning tree structures
-- `cascade_model.py`: Model integration
-- `cascade_inference.py`: Inference pipeline
-- `cascade_trainer.py`: Training routines
-- `cascade_demo.py`: Demo script
+## Quick start
 
-## System Requirements
-- Python 3.8+
-- CPU: 4+ cores (8+ recommended)
-- RAM: 8GB+ (16GB+ recommended)
-- GPU: 8GB+ VRAM for production
+### Ingest a corpus
+
+```bash
+python run_ingest.py --corpus /path/to/text/files --output ./reasoning_cache
+```
+
+### Run the explorer
+
+```bash
+cd Clearbox-AI-Plugin-Runner-main/Clearbox-AI-Plugin-Runner-main
+PYTHONPATH="plugins:../../" python plugin_runner.py --port 9090
+```
+
+Open `http://localhost:9090/api/cascade-616/panel` — type any word, explore.
+
+### Use the prediction API directly
+
+```python
+from cascade_tokenizer.predict import Predictor
+
+p = Predictor("reasoning_cache/evidence.bin")
+
+p.predict_next("ai", k=5)
+# [('driven', 2233), ('symbolis', 1707), ('models', 1447), ...]
+
+p.forward_chain("security", steps=6)
+# [('system', 587), ('performance', 639), ('metrics', 827), ...]
+
+p.full_context("lexicon", k=3)
+# {'before_1': [('evolved', 89), ('cortex', 86), ...], 'after_1': [('nlp', 70), ...], ...}
+```
+
+## Requirements
+
+- Python 3.10+
+- PyTorch (CUDA optional, used for parallel mapping)
+- FastAPI + Uvicorn (for plugin runner)
+- tqdm, pandas (for ingestion)
+
+## Performance
+
+838 files (54MB) on i9 + RTX 3070:
+
+| Phase | Time |
+|-------|------|
+| Parallel mapping (16 workers) | 17s |
+| Lexicon resolution (64K words) | 8s |
+| Binary cell accumulation (50M edges) | 18 min |
+| Evidence store write (623MB) | 3 min |
+| **Total ingest** | **~21 min** |
+| Prediction query | **<1ms** |
 
 ## License
-See project documentation for license details.
+
+MIT
