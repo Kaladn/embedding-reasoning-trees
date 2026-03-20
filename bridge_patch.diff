@@ -1,0 +1,269 @@
+--- BRIDGE PATCH: Category-Aware 6-1-6 View Filtering ---
+--- Target: E:\clearbox-ai-studio-v2-main\bridges\clearbox_bridge.py
+--- Mode: READ ONLY reference — apply manually
+--- Date: 2026-03-19
+---
+--- What this patch does:
+---   1. _pack_side(): adds "category" field to every packed neighbor item
+---   2. get_616(): filters suppressed categories BEFORE applying limit
+---   3. Renames total_windows → total_co_occurrence_weight (honest naming)
+---   4. Adds view_filtered + suppressed_count to response metadata
+---
+--- What this patch does NOT touch:
+---   - compute_window_counts() — pure counting, untouched
+---   - map_text() — paragraph splitting and merge, untouched
+---   - _attach_metadata() — metadata attachment, untouched
+---   - JSON map storage — untouched (just richer per neighbor)
+---   - Any SQLite schema or anchor_index logic
+---
+
+================================================================================
+PATCH 1: _pack_side() — enrich neighbor items with category
+================================================================================
+
+Location: clearbox_bridge.py, method _pack_side(), around line 689
+
+--- BEFORE (lines 696-703) ---
+
+                focus_pack[str(distance)] = [
+                    {
+                        "token": token,
+                        "count": int(count),
+                        "in_lexicon": token in self.word_index,
+                        "symbol": self.entries[self.word_index[token]].symbol if token in self.word_index else None,
+                    }
+                    for token, count in counter.most_common()
+                ]
+
+--- AFTER ---
+
+                focus_pack[str(distance)] = [
+                    {
+                        "token": token,
+                        "count": int(count),
+                        "in_lexicon": token in self.word_index,
+                        "symbol": self.entries[self.word_index[token]].symbol if token in self.word_index else None,
+                        "category": (
+                            self.entries[self.word_index[token]].payload.get("category")
+                            if token in self.word_index else None
+                        ),
+                    }
+                    for token, count in counter.most_common()
+                ]
+
+--- NOTES ---
+- One field added per neighbor item
+- Cost: one additional dict lookup per neighbor (already doing two)
+- Backward compatible: old maps without category just have None
+- Stored JSON now self-describes every neighbor's class
+
+
+================================================================================
+PATCH 2: get_616() — filter-first, then limit, with suppression metadata
+================================================================================
+
+Location: clearbox_bridge.py, around line 1035
+
+--- ADD (module/class scope, NOT inside get_616) ---
+
+# Suppression classes — extensible frozenset, not hardcoded string check.
+# Add "structural", "pronoun", "auxiliary" later without rewriting.
+# Lives at module scope: testable, reusable for graph/search later,
+# no duplicated policy.
+SUPPRESSED_VIEW_CLASSES: frozenset = frozenset({"function"})
+
+--- BEFORE (lines 1035-1062) ---
+
+    def get_616(self, word: str, topk: Optional[int] = None) -> Dict[str, Any]:
+        if not self.last_map_result:
+            return {"word": word, "before": {}, "after": {}, "total_windows": 0}
+        norm = self.normalise_token(word)
+        payload = self.last_map_result.get("items", {}).get(norm)
+        if not payload:
+            return {"word": word, "before": {}, "after": {}, "total_windows": 0}
+
+        limit = topk or self.top_k
+
+        def trim(buckets: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[List[Any]]]:
+            output: Dict[str, List[List[Any]]] = {}
+            for distance, items in buckets.items():
+                output[distance] = [[item["token"], item["count"]] for item in items[:limit]]
+            return output
+
+        before = trim(payload.get("before", {}))
+        after = trim(payload.get("after", {}))
+        total = sum(count for buckets in before.values() for _, count in buckets)
+        total += sum(count for buckets in after.values() for _, count in buckets)
+
+        return {
+            "word": payload.get("lexicon_word", word),
+            "symbol": payload.get("symbol"),
+            "before": before,
+            "after": after,
+            "total_windows": int(total),
+        }
+
+--- AFTER ---
+
+    def get_616(self, word: str, topk: Optional[int] = None,
+                include_suppressed: bool = False) -> Dict[str, Any]:
+        """Return 6-1-6 positional view for *word*.
+
+        Args:
+            word: anchor token to look up
+            topk: max neighbors per position (default: self.top_k)
+            include_suppressed: if False (default), neighbors whose
+                ``category`` is in SUPPRESSED_VIEW_CLASSES are hidden.
+                Set True for forensic / debug / full-graph mode.
+
+        Response fields:
+            total_co_occurrence_weight: sum of ALL neighbor counts across
+                all 12 positions — raw, unfiltered, from the stored map.
+                This is NOT an occurrence count — it is the aggregate
+                strength of this anchor's connections. ALWAYS raw truth.
+            visible_weight: sum after suppression + trimming. Only present
+                when view_filtered is True. Do NOT treat as authoritative.
+            view_filtered: whether suppression was applied
+            suppressed_count: how many neighbor entries were hidden
+        """
+        empty = {
+            "word": word, "before": {}, "after": {},
+            "total_co_occurrence_weight": 0,
+            "view_filtered": not include_suppressed,
+            "suppressed_count": 0,
+        }
+        if not self.last_map_result:
+            return empty
+        norm = self.normalise_token(word)
+        payload = self.last_map_result.get("items", {}).get(norm)
+        if not payload:
+            return empty
+
+        limit = topk or self.top_k
+
+        def trim(buckets: Dict[str, List[Dict[str, Any]]]):
+            """Filter suppressed categories FIRST, then apply limit."""
+            output: Dict[str, List[List[Any]]] = {}
+            suppressed = 0
+            for distance, items in buckets.items():
+                if include_suppressed:
+                    visible = items
+                else:
+                    visible = [
+                        item for item in items
+                        if item.get("category") not in SUPPRESSED_VIEW_CLASSES
+                    ]
+                    suppressed += len(items) - len(visible)
+                output[distance] = [
+                    [item["token"], item["count"]]
+                    for item in visible[:limit]
+                ]
+            return output, suppressed
+
+        # ── Raw total from UNFILTERED stored payload — this is truth ──
+        raw_before = payload.get("before", {})
+        raw_after = payload.get("after", {})
+        raw_weight = 0
+        for buckets in raw_before.values():
+            raw_weight += sum(item["count"] for item in buckets)
+        for buckets in raw_after.values():
+            raw_weight += sum(item["count"] for item in buckets)
+
+        # ── Filtered view ──
+        before, sup_before = trim(raw_before)
+        after, sup_after = trim(raw_after)
+        total_suppressed = sup_before + sup_after
+
+        # Visible weight — sum from filtered+trimmed lists only.
+        # Present for UI convenience, but NOT authoritative.
+        visible_weight = sum(count for buckets in before.values() for _, count in buckets)
+        visible_weight += sum(count for buckets in after.values() for _, count in buckets)
+
+        result = {
+            "word": payload.get("lexicon_word", word),
+            "symbol": payload.get("symbol"),
+            "before": before,
+            "after": after,
+            "total_co_occurrence_weight": int(raw_weight),
+            "view_filtered": not include_suppressed,
+            "suppressed_count": total_suppressed,
+        }
+        if not include_suppressed:
+            result["visible_weight"] = int(visible_weight)
+        return result
+
+--- NOTES ---
+- total_windows renamed to total_co_occurrence_weight (honest naming)
+- RAW TOTAL IS ALWAYS RAW — computed from unfiltered stored payload, never
+  from the filtered view. This is the truth field. It never changes based
+  on view settings. Comparing filtered vs unfiltered runs will show the
+  same total_co_occurrence_weight. That's the point.
+- visible_weight is a convenience field — only present when filtering is
+  active. Explicitly secondary. Do NOT use for ranking or comparison.
+- Filter applied BEFORE limit — always get full useful lists
+- include_suppressed=False default — function words hidden unless requested
+- SUPPRESSED_VIEW_CLASSES at module scope — testable, reusable, no scatter
+- Response carries view_filtered + suppressed_count for UI awareness
+- Old maps without "category" field: item.get("category") returns None,
+  None is not in SUPPRESSED_VIEW_CLASSES, so nothing gets suppressed.
+  Fully backward compatible. Old maps are "legacy noisy" — accept it,
+  don't silently pretend the views are equivalent.
+
+
+================================================================================
+PATCH 3 (OPTIONAL): Lexicon616Service — pass through include_suppressed
+================================================================================
+
+Location: bridges/services/lexicon_616.py
+
+--- BEFORE ---
+
+    def get(self, word: str, topk: int) -> dict[str, Any]:
+        if not word:
+            raise HTTPException(status_code=400, detail="word is required")
+        payload = self.state.bridge.get_616(word, topk)
+        payload["version"] = self.version
+        return payload
+
+--- AFTER ---
+
+    def get(self, word: str, topk: int,
+            include_suppressed: bool = False) -> dict[str, Any]:
+        if not word:
+            raise HTTPException(status_code=400, detail="word is required")
+        payload = self.state.bridge.get_616(
+            word, topk, include_suppressed=include_suppressed
+        )
+        payload["version"] = self.version
+        return payload
+
+
+================================================================================
+PARAGRAPH BOUNDARY VERIFICATION (no changes needed)
+================================================================================
+
+compute_window_counts() already handles boundary ramp correctly:
+
+  - Token at position 0: before_pos < 0 → break → 0-1-N (N = min(6, len-1))
+  - Token at position 2: gets 2-1-N
+  - Last token: after_pos >= length → break → N-1-0
+  - Short paragraph (5 words): produces 0-1-4, 1-1-3, 2-1-2, 3-1-1, 4-1-0
+  - Paragraph separator: re.split(r'\n\s*\n', text) → double newline = wall
+  - Each paragraph windowed independently, counts merge safely
+
+No patch needed. Behavior is already correct.
+
+
+================================================================================
+ALIGNMENT NOTE: STOP_TOKENS vs category:"function"
+================================================================================
+
+core/lakespeak/index/anchor_reranker.py has a hardcoded STOP_TOKENS frozenset
+(~50 words). The Canonical lexicon now has category:"function" on ~56 words
+(slightly broader set). These should eventually converge:
+
+  STOP_TOKENS should read from the lexicon's category field instead of
+  being maintained as a separate hardcoded list.
+
+Not blocking for this patch. The two sets agree on the critical words.
+Convergence is a cleanup task, not a structural change.

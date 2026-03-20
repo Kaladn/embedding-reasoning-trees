@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Generated outputs
+demo_cascade_system/
+demo_output/
+demo_temp_registry.json
+reasoning_cache/
+
+# Large data (tracked separately)
+Lexical Data/
+*.pkl
+*.bin
+*.pt
+
+# OS
+Thumbs.db
+.DS_Store
