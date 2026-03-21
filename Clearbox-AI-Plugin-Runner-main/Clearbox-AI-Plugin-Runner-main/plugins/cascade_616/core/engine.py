@@ -6,7 +6,6 @@ Reads its own evidence.bin store and returns predictions/chains.
 """
 
 import logging
-import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -59,13 +58,7 @@ class CascadeEngine:
         if not store_file.exists():
             raise FileNotFoundError(f"Evidence store not found: {store_file}")
 
-        # Import from the cascade_tokenizer package
-        # Add the project root to sys.path if needed
-        project_root = str(store_file.parent.parent)
-        if project_root not in sys.path:
-            sys.path.insert(0, project_root)
-
-        from cascade_tokenizer.binary_cell import CellStore
+        from cascade_616.core.cell_reader import CellStore
         self._store = CellStore(str(store_file))
         self._store.load_index()
         self._loaded = True

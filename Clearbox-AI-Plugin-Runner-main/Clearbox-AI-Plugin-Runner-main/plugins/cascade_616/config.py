@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULTS: Dict[str, Any] = {
     "enabled": True,
-    "store_path": "",       # path to evidence.bin — required
-    "lexicon_path": "",     # path to Lexical Data/ — optional for enrichment
+    "store_path": "D:/Clearbox AI Data Root/cascade_616/evidence.bin",
+    "lexicon_path": "",     # optional — symbols baked into evidence store
     "default_k": 5,
     "max_chain_steps": 12,
 }
